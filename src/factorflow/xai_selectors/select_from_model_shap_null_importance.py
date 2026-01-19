@@ -106,7 +106,7 @@ class SelectFromModelShapNullImportance(Selector):
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
 
-        return self.feature_names_in_[mask].tolist()
+        return np.array(self.feature_names_in_)[mask].tolist()
 
     def _fit(self, X: pd.DataFrame, y: Any = None, **kwargs: Any) -> "SelectFromModelShapNullImportance":
         """执行特征选择逻辑.
@@ -202,7 +202,7 @@ class SelectFromModelShapNullImportance(Selector):
 
     def _process_shap_output(self, explanation: Any) -> tuple[np.ndarray, np.ndarray]:
         """处理 SHAP 输出, 确保兼容多分类."""
-        shap_vals = explanation.to_numpy()
+        shap_vals = explanation.values  # noqa: PD011
         base_vals = explanation.base_values
         if shap_vals.ndim == 3:  # 多分类任务
             shap_vals = np.abs(shap_vals).mean(axis=-1)

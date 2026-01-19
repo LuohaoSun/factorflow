@@ -166,9 +166,10 @@ class SelectFromModelShapCV(Selector):
 
         # 2. 交叉验证循环
         fold_scores = []
+        y_series = pd.Series(y, index=X.index) if not isinstance(y, pd.Series) else y
         for fold_idx, (train_idx, val_idx) in enumerate(cv.split(X, y)):
             X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
-            y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+            y_train, y_val = y_series.iloc[train_idx], y_series.iloc[val_idx]
 
             # 获取 SHAP 采样索引
             X_shap, fill_idx = self._get_shap_samples(X_val, val_idx, fold_idx)

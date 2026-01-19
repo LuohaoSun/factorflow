@@ -17,12 +17,13 @@ dependencies = [
   "shap",
   "matplotlib",
   "seaborn",
-  "mlflow",
-  "loguru",
+    "mlflow",
+    "loguru",
+    "feature-engine",
 ]
 
 [project.optional-dependencies]
-dev = ["ipykernel", "pre-commit", "pyright"]
+dev = ["ipykernel", "pre-commit", "pyright", "pytest"]
 
 [tool.hatch.envs.default]
 installer = "uv"
