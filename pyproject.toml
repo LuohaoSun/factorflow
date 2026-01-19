@@ -3,22 +3,24 @@ build-backend = "hatchling.build"
 requires = ["hatchling", "hatch-vcs"]
 
 [project]
-name = "my-lib"
-description = "my awesome project description"
+name = "factorflow"
+description = "FactorFlow is a Python library for feature engineering and selection."
 dynamic = ["version"]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 
-dependencies = ["numpy", "scipy", "pandas", "scikit_learn"]
-
-[project.optional-dependencies]
-dev = [
-  "ipykernel",
+dependencies = [
+  "numpy",
+  "scipy",
+  "pandas",
+  "scikit_learn",
+  "shap",
   "matplotlib",
   "seaborn",
-  "pre-commit",
-  "pyright",
 ]
+
+[project.optional-dependencies]
+dev = ["ipykernel", "pre-commit", "pyright"]
 
 [tool.hatch.envs.default]
 installer = "uv"
@@ -28,7 +30,7 @@ features = ["dev"]
 source = "vcs"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/my_lib"]
+packages = ["src/factorflow"]
 
 [tool.uv]
 index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
