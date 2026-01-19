@@ -26,13 +26,13 @@
 
 4.  **属性与兼容性**:
     - **自动获得**:
-        - `self.feature_names_in_` / `self.n_features_in_`
-        - `self.removed_features_`
+      - `self.feature_names_in_` / `self.n_features_in_`
+      - `self.removed_features_`
     - **流式 API**:
-        - `protect_features(pattern)`: 保护特定特征不被删除。
-        - `check_features(pattern)`: 检查特征存在情况。
-        - `check_selection()`: 检查特征数量变化。
-        - `set_label(label)`: 设置日志打印时的标签。
+      - `protect_features(pattern)`: 保护特定特征不被删除。
+      - `check_features(pattern)`: 检查特征存在情况。
+      - `check_selection()`: 检查特征数量变化。
+      - `set_label(label)`: 设置日志打印时的标签。
 
 ### 2. 标准模版
 

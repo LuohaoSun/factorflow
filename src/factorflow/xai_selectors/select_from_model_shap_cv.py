@@ -1,27 +1,18 @@
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
-from loguru import logger
 import numpy as np
 import pandas as pd
 import shap
 from sklearn.base import BaseEstimator, clone
 from sklearn.metrics import (
     accuracy_score,
-    confusion_matrix,
     mean_absolute_error,
-    r2_score,
     roc_auc_score,
 )
 from sklearn.model_selection import KFold, StratifiedKFold
 
-try:
-    import mlflow
-except ImportError:
-    mlflow = None
-
-from factorflow.base import Selector
-
-from ._plot import plot_oof_shap_summary
+from factorflow.base import Callback, Selector
+from factorflow.xai_selectors.callbacks import CVLogger, FoldEndCallback
 
 
 class SelectFromModelShapCV(Selector):
@@ -30,7 +21,7 @@ class SelectFromModelShapCV(Selector):
     算法原理:
     1. 交叉验证: 通过 K-Fold 交叉验证，每一折使用验证集计算该样本的 SHAP 值。
     2. OOF 拼接: 将所有折验证集的 SHAP 值拼接，形成一个覆盖全量训练数据的 Out-of-Fold (OOF) SHAP 矩阵。
-    3. 全局评价: 基于 OOF SHAP 矩阵计算全局特征重要性（均值绝对值），并计算全量数据的预测指标。
+    3. 全局评价: 基于 OOF SHAP 矩阵计算全局特征重要性（均值绝对值）。
 
     该方法比单次 Hold-out 验证更稳健，因为它利用了所有训练样本来评估特征贡献。
     所有 OOF 属性的样本顺序与输入 X 的原始样本顺序保持一致。
@@ -72,6 +63,7 @@ class SelectFromModelShapCV(Selector):
         """初始化 CV SHAP 选择器.
 
         Args:
+        ----
             estimator: 基础估计器.
             task_type: 任务类型, "classification" 或 "regression".
             n_features_to_select: 要选择的特征数量. 整数表示个数, 浮点数 (0-1) 表示比例,
@@ -86,7 +78,15 @@ class SelectFromModelShapCV(Selector):
             store_shap_data: 是否存储 X 的全量数据副本以便后续绘图.
             **kwargs: 透传给父类 BaseSelector 的参数.
         """
-        super().__init__(**kwargs)
+        # 初始化统一的 CVLogger
+        default_callbacks: list[Callback] = [
+            CVLogger(verbose=verbose, max_display=max_display),
+        ]
+
+        user_callbacks: list[Callback] = kwargs.pop("callbacks", []) or []
+        all_callbacks = default_callbacks + user_callbacks
+
+        super().__init__(callbacks=all_callbacks, **kwargs)
         self.estimator = estimator
         self.task_type = task_type
         self.n_features_to_select = n_features_to_select
@@ -145,7 +145,6 @@ class SelectFromModelShapCV(Selector):
         self.shap_data_oof_ = (
             pd.DataFrame(index=X.index, columns=X.columns, dtype=float) if self.store_shap_data else None
         )
-        # 统一使用 float 存储预测值，方便使用 np.nan 占位
         self.y_preds_oof_ = np.full(len(y), np.nan, dtype=float)
         self.y_proba_oof_ = None
         self.fold_auc_scores_ = []
@@ -156,16 +155,7 @@ class SelectFromModelShapCV(Selector):
             else KFold(n_splits=self.n_splits, shuffle=True, random_state=self.random_state)
         )
 
-        if self.verbose:
-            logger.info(f"[{self.label}] Starting {self.n_splits}-Fold CV SHAP calculation...")
-
-        # 记录模型信息到 MLflow
-        if mlflow and mlflow.active_run():
-            model_name = self.estimator.__class__.__name__
-            mlflow.log_param(f"{self.label}/estimator_type", model_name)
-
         # 2. 交叉验证循环
-        fold_scores = []
         y_series = pd.Series(y, index=X.index) if not isinstance(y, pd.Series) else y
         for fold_idx, (train_idx, val_idx) in enumerate(cv.split(X, y)):
             X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
@@ -193,23 +183,17 @@ class SelectFromModelShapCV(Selector):
             self.y_preds_oof_[val_idx] = y_pred
 
             score = self._evaluate_fold_metric(y_val, y_pred)
-            fold_scores.append(score)
-
-            # 记录概率和 AUC
             auc = self._record_proba_and_auc(model, X_val, y_val, val_idx)
 
-            if self.verbose:
-                logger.info(f"Fold {fold_idx + 1}: Score={score:.4f}, AUC={auc:.4f}")
+            # 触发单折回调 (on_fold_end)
+            fold_logs = {"score": score, "auc": auc}
+            for cb in self.callbacks:
+                if isinstance(cb, FoldEndCallback):
+                    cb.on_fold_end(self, fold_idx, fold_logs)
 
-        # 3. 后处理: 计算全局重要性并生成报告
+        # 3. 后处理: 计算全局重要性
         self.feature_importances_ = np.nanmean(np.abs(self.shap_values_oof_), axis=0)
         self.selected_features_ = self._get_selected_features()
-
-        if self.verbose:
-            self._print_global_report(y, fold_scores)
-
-        if self.verbose >= 2:
-            plot_oof_shap_summary(self, X, max_display=self.max_display)
 
         return self
 
@@ -271,82 +255,3 @@ class SelectFromModelShapCV(Selector):
             return float(roc_auc_score(y_true, y_proba, multi_class="ovr", average="macro"))
         except Exception:
             return np.nan
-
-    def _print_global_report(self, y_true: pd.Series, fold_scores: list[float]):
-        """打印全局 OOF 评价报告并记录至 MLflow."""
-        avg_score = np.mean(fold_scores) if fold_scores else 0.0
-        logger.info(f"[{self.label}] Average Metric (per fold): {avg_score:.4f}")
-        valid_aucs = [a for a in self.fold_auc_scores_ if not np.isnan(a)]
-        avg_auc = np.mean(valid_aucs) if valid_aucs else None
-        if avg_auc is not None:
-            logger.info(f"[{self.label}] Average AUC (per fold): {avg_auc:.4f}")
-
-        y_pred_oof = self.y_preds_oof_
-        nan_mask = pd.isna(y_pred_oof)
-        nan_count = nan_mask.sum()
-
-        if nan_count > 0:
-            logger.warning(
-                f"[{self.label}] Found {nan_count} samples ({nan_count / len(y_true):.2%}) "
-                "without OOF predictions! This usually indicates issues in the CV split or failed folds."
-            )
-
-        if self.task_type == "classification":
-            mask = ~nan_mask
-            y_t, y_p = y_true[mask], y_pred_oof[mask]
-            # 关键：将 float 预测值转回真实标签的类型 (如 int)，确保 sklearn 识别为分类任务
-            y_p = y_p.astype(y_t.dtype)  # pyright: ignore[reportCallIssue, reportArgumentType]
-            acc = float(accuracy_score(y_t, y_p))
-            logger.info(f"[{self.label}] OOF Global Accuracy: {acc:.4f}")
-
-            # 混淆矩阵
-            labels = np.unique(np.concatenate([y_t, y_p]))
-            cm = confusion_matrix(y_t, y_p, labels=labels)
-            cm_df = pd.DataFrame(
-                cm,
-                index=pd.Index([f"Actual_{label}" for label in labels]),
-                columns=pd.Index([f"Pred_{label}" for label in labels]),
-            )
-            logger.info(f"[{self.label}] OOF Confusion Matrix:\n{cm_df}")
-
-            if mlflow and mlflow.active_run():
-                mlflow.log_metric(f"{self.label}/cv_avg_score", float(avg_score))
-                if avg_auc is not None:
-                    mlflow.log_metric(f"{self.label}/cv_avg_auc", float(avg_auc))
-                mlflow.log_metric(f"{self.label}/oof_accuracy", float(acc))
-
-                mlflow.log_table(
-                    data=cm_df.reset_index(),
-                    artifact_file=f"model/metrics/{self.label}/oof_confusion_matrix.json",
-                )
-        else:
-            mask = ~np.isnan(y_pred_oof.astype(float))
-            y_t, y_p = y_true[mask], y_pred_oof[mask]
-            mae = float(mean_absolute_error(y_t, y_p))
-            r2 = float(r2_score(y_t, y_p))
-            logger.info(f"[{self.label}] OOF Global MAE: {mae:.4f}, R2: {r2:.4f}")
-            if mlflow and mlflow.active_run():
-                mlflow.log_metric(f"{self.label}/cv_avg_score", float(avg_score))
-                mlflow.log_metric(f"{self.label}/oof_mae", float(mae))
-                mlflow.log_metric(f"{self.label}/oof_r2", float(r2))
-
-        # 计算 OOF AUC（如果概率可用）
-        if self.task_type == "classification" and self.y_proba_oof_ is not None:
-            # 过滤掉概率为 NaN 的样本
-            proba_nan_mask = np.isnan(self.y_proba_oof_).any(axis=1)
-            if proba_nan_mask.any():
-                logger.warning(
-                    f"[{self.label}] Found {proba_nan_mask.sum()} samples without OOF probabilities! "
-                    "OOF AUC will be calculated on valid samples."
-                )
-                y_true_filtered = y_true[~proba_nan_mask]
-                y_proba_filtered = self.y_proba_oof_[~proba_nan_mask]
-            else:
-                y_true_filtered = y_true
-                y_proba_filtered = self.y_proba_oof_
-
-            if len(y_true_filtered) > 0:
-                oof_auc = self._calculate_auc(cast(pd.Series, y_true_filtered), y_proba_filtered)
-                logger.info(f"[{self.label}] OOF Global AUC: {oof_auc:.4f}")
-                if mlflow and mlflow.active_run():
-                    mlflow.log_metric(f"{self.label}_oof_auc", float(oof_auc))

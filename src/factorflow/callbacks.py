@@ -5,6 +5,18 @@ This module is intended for callbacks that require additional dependencies
 for the core base module.
 """
 
-from .base import Callback, Selector
+from .base import Callback, FeatureCheckCallback, FeatureProtectionCallback, Selector, ShapeCheckCallback
+from .xai_selectors.callbacks import (
+    CVLogger,
+    NullImportanceLogger,
+)
 
-__all__ = ["Callback", "Selector"]
+__all__ = [
+    "CVLogger",
+    "Callback",
+    "FeatureCheckCallback",
+    "FeatureProtectionCallback",
+    "NullImportanceLogger",
+    "Selector",
+    "ShapeCheckCallback",
+]

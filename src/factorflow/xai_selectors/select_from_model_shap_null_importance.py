@@ -8,14 +8,9 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.model_selection import train_test_split
 from tqdm.auto import tqdm
 
-try:
-    import mlflow
-except ImportError:
-    mlflow = None
+from factorflow.base import Callback, Selector
+from factorflow.xai_selectors.callbacks import NullImportanceLogger
 
-from factorflow.base import Selector
-
-from ._plot import plot_null_importance_distributions
 from .select_from_model_shap_cv import SelectFromModelShapCV
 
 
@@ -27,9 +22,8 @@ class SelectFromModelShapNullImportance(Selector):
     2. Null Runs: 多次随机打乱目标变量 y 的顺序（Target Permutation），并重新训练模型计算 SHAP 重要性。
        这一步构建了每个特征在“无意义数据”上的重要性零分布 (Null Distribution)。
     3. 显著性评估:
-       - P-value: 计算零分布中重要性大于或等于真实重要性的次数占比。若 P-value 较小，说明该特征的重要性
-         并非偶然获得。
-       - Ratio: 计算真实重要性与零分布均值的比率。若 Ratio 远大于 1，说明该特征贡献显著。
+       - P-value: 计算零分布中重要性大于或等于真实重要性的次数占比。
+       - Ratio: 计算真实重要性与零分布均值的比率。
 
     属性:
         real_importances_ (np.ndarray): 原始数据上的特征重要性 (Base Run).
@@ -62,27 +56,15 @@ class SelectFromModelShapNullImportance(Selector):
         cv: int = 5,
         **kwargs: Any,
     ) -> None:
-        """初始化 Null Importance 选择器.
+        """初始化 Null Importance 选择器."""
+        # 设置默认 Callbacks
+        default_callbacks: list[Callback] = [
+            NullImportanceLogger(verbose=verbose, max_display=max_display),
+        ]
+        user_callbacks: list[Callback] = kwargs.pop("callbacks", []) or []
+        all_callbacks = default_callbacks + user_callbacks
 
-        Args:
-            estimator: 基础估计器 (需符合 sklearn API).
-            task_type: 任务类型, "classification" 或 "regression".
-            n_trials: 目标变量置换的次数 (实验次数). 建议至少 50 次以获得稳健的分布.
-            mode: 筛选模式.
-                - "p_value": 计算 P 值 (Null >= Real 的占比), 保留 p < threshold 的特征.
-                - "ratio": 计算 Real / Mean(Null), 保留比率 > threshold 的特征.
-            threshold: 筛选阈值. p_value 模式下通常设为 0.05; ratio 模式下通常设为 1.0 以上.
-            val_size: Null Runs 阶段 Hold-out 验证集的比例.
-            random_state: 随机种子, 确保实验可重复.
-            shap_sample_size: 计算 SHAP 值时的样本采样量, 设为 None 则使用全量验证集.
-            fit_uses_eval_set: 模型训练时是否需要传入 eval_set (如梯度提升树的早停).
-            verbose: 日志详尽程度. 0: 静默; 1: 打印指标; 2: 打印指标并本地绘图.
-            max_display: 报告和绘图时显示的 Top 特征数量.
-            model_fit_params: 透传给 estimator.fit 的额外参数.
-            cv: Base Run 阶段用于计算真实重要性的交叉验证折数.
-            **kwargs: 透传给父类 BaseSelector 的参数 (如 label, protected_features_patterns 等).
-        """
-        super().__init__(**kwargs)
+        super().__init__(callbacks=all_callbacks, **kwargs)
         self.estimator = estimator
         self.task_type = task_type
         self.n_trials = n_trials
@@ -109,12 +91,7 @@ class SelectFromModelShapNullImportance(Selector):
         return np.array(self.feature_names_in_)[mask].tolist()
 
     def _fit(self, X: pd.DataFrame, y: Any = None, **kwargs: Any) -> "SelectFromModelShapNullImportance":
-        """执行特征选择逻辑.
-
-        包含两个阶段:
-        1. Base Run: 使用 SelectFromModelShapCV 获取原始数据上的稳健 SHAP 重要性.
-        2. Null Runs: 多次执行 Target Permutation 训练并收集零分布.
-        """
+        """执行特征选择逻辑."""
         y = np.asarray(y)
         if not np.issubdtype(y.dtype, np.number):
             raise ValueError(f"Target variable y must be numeric for SHAP selectors, but got {y.dtype}")
@@ -182,13 +159,6 @@ class SelectFromModelShapNullImportance(Selector):
         self._calculate_stats()
         self.selected_features_ = self._get_selected_features()
 
-        # 4. 报告与可视化
-        if self.verbose:
-            self._log_summary()
-
-        if self.verbose >= 2 or (self.verbose >= 1 and mlflow and mlflow.active_run()):
-            plot_null_importance_distributions(self, top_k=self.max_display)
-
         return self
 
     def _fit_null_model(self, X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series) -> Any:
@@ -222,19 +192,3 @@ class SelectFromModelShapNullImportance(Selector):
 
         # 统一基类所需的重要性属性
         self.feature_importances_ = self.real_importances_
-
-    def _log_summary(self, k: int = 10) -> None:
-        """打印显著性分析摘要日志."""
-        df = pd.DataFrame(
-            {
-                "feature": self.feature_names_in_,
-                "real_imp": self.real_importances_,
-                "p_value": self.p_values_,
-                "ratio": self.scores_,
-            }
-        )
-        top_df = df.sort_values(["p_value", "real_imp"], ascending=[True, False]).head(k)
-        logger.info(f"[{self.label}] Null Importance Summary (Top {k}):\n{top_df.to_string(index=False)}")
-
-        if mlflow and mlflow.active_run():
-            mlflow.log_metric(f"{self.label}_selected_count", len(self.selected_features_))

@@ -23,11 +23,11 @@ class Callback:
     """Base class for FactorFlow Selectors callbacks."""
 
     def on_fit_start(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
-        """Called at the beginning of fit."""
+        """Handle the beginning of fit."""
         pass
 
     def on_fit_end(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
-        """Called at the end of fit."""
+        """Handle the end of fit."""
         pass
 
 
@@ -56,6 +56,7 @@ class FeatureCheckCallback(Callback):
         """Initialize FeatureCheckCallback.
 
         Args:
+        ----
             patterns: List of glob patterns to check.
         """
         self.patterns = patterns or []
@@ -64,6 +65,7 @@ class FeatureCheckCallback(Callback):
         """Add more patterns to check.
 
         Args:
+        ----
             patterns: A single pattern or list of patterns.
         """
         if isinstance(patterns, str):
@@ -109,6 +111,7 @@ class FeatureProtectionCallback(Callback):
         """Initialize FeatureProtectionCallback.
 
         Args:
+        ----
             patterns: List of glob patterns to protect.
         """
         self.patterns = patterns or []
@@ -117,6 +120,7 @@ class FeatureProtectionCallback(Callback):
         """Add more patterns to protect.
 
         Args:
+        ----
             patterns: A single pattern or list of patterns.
         """
         if isinstance(patterns, str):
@@ -179,7 +183,8 @@ class Selector(BaseEstimator, SelectorMixin):
     - **无需**实现 `_get_support_mask`，基类已提供基于 `selected_features_` 和保护逻辑的实现。
     - **禁止**重写 `fit` 和 `transform`。
 
-    Attributes:
+    Attributes
+    ----------
         selected_features_ (list[str]): 拟合后确定的最终特征列表。
         feature_names_in_ (np.ndarray): 输入特征名称。
         n_features_in_ (int): 输入特征数量。
@@ -205,6 +210,7 @@ class Selector(BaseEstimator, SelectorMixin):
         """初始化 BaseSelector.
 
         Args:
+        ----
             protected_features_patterns: 即使被算法剔除也要强制保留的特征模式列表.
             selection_check: 是否在 fit 前后检查特征数量变化.
             check_features_patterns: 需要检查的特征模式列表.
@@ -257,11 +263,13 @@ class Selector(BaseEstimator, SelectorMixin):
         在此方法中，子类应计算并将算法选中的特征赋值给 `self.selected_features_`。
 
         Args:
+        ----
             X: 输入特征 DataFrame.
             y: 目标变量.
             **kwargs: 额外参数.
 
         Returns:
+        -------
             self
         """
         ...
@@ -292,6 +300,7 @@ class Selector(BaseEstimator, SelectorMixin):
         """设置此选择器的标签, 用于在打印检查结果时显示.
 
         Args:
+        ----
             label: 此选择器的标签.
         """
         self.label = label
@@ -313,6 +322,7 @@ class Selector(BaseEstimator, SelectorMixin):
         """设置此选择器需要在 fit 前后检查哪些特征.
 
         Args:
+        ----
             feature_pattern: 需要检查的特征名称. 支持 glob 模式.
         """
         if isinstance(feature_pattern, list):
@@ -336,6 +346,7 @@ class Selector(BaseEstimator, SelectorMixin):
         """设置此选择器需要保护哪些特征不被过滤掉.
 
         Args:
+        ----
             feature_pattern: 需要保护的特征名称. 支持 glob 模式.
         """
         if isinstance(feature_pattern, list):

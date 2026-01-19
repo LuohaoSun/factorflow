@@ -89,7 +89,7 @@ def _draw_boxplot_on_ax(
         zwsp = "\u200b"
         new_cats = [f"{zwsp}{v}" for v in sorted(unique_vals)]
         mapping = {v: f"{zwsp}{v}" for v in unique_vals}
-        plot_df[x_col] = pd.Categorical(str_values.map(mapping), categories=new_cats)
+        plot_df[x_col] = pd.Categorical(str_values.replace(mapping), categories=new_cats)
 
     # 3. 绘制 Boxplot (主体) - 设置 hue=x_col 并 legend=False 避免 FutureWarning
     sns.boxplot(data=plot_df, x=x_col, y=data_col, hue=x_col, ax=ax, showmeans=False, legend=False, **kwargs)

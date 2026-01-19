@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["ipykernel", "pre-commit", "pyright", "pytest"]
+dev = ["ipykernel", "pre-commit", "pyright", "pytest", "ruff"]
 
 [tool.hatch.envs.default]
 installer = "uv"

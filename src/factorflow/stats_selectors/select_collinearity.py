@@ -11,7 +11,8 @@ class SelectCollinearity(Selector):
 
     自动识别高度相关的特征组，并从每组中保留一个代表性特征。
 
-    Attributes:
+    Attributes
+    ----------
         _internal_selector (Any): 内部使用的 feature_engine.selection.SmartCorrelatedSelection 实例。
     """
 
@@ -29,6 +30,7 @@ class SelectCollinearity(Selector):
         """基于共线性的特征选择器.
 
         Args:
+        ----
             threshold: 相关系数阈值 (0到1)。默认 0.95。
             method: 相关系数计算方法。
             keep_strategy: 保留策略。映射到 feature-engine 的 selection_method。
@@ -51,6 +53,7 @@ class SelectCollinearity(Selector):
         """拟合选择器.
 
         Args:
+        ----
             X: 输入特征 DataFrame.
             y: 目标变量.
             **kwargs: 额外参数.
@@ -74,7 +77,7 @@ class SelectCollinearity(Selector):
             missing_values=self.missing_values,
             selection_method=selection_method,
             estimator=self.estimator,
-            scoring="roc_auc" if self.estimator else None,
+            scoring="roc_auc" if self.estimator is not None else "accuracy",
             cv=3,
         )
 
@@ -91,7 +94,8 @@ class SelectCollinearity(Selector):
     def get_feature_groups(self) -> dict[str, list[str]]:
         """获取特征分组详情.
 
-        Returns:
+        Returns
+        -------
             dict[str, list[str]]: 字典形式: { '保留的特征名': ['被移除的特征A', '被移除的特征B'] }
             如果没有特征被移除，返回空字典。
         """
