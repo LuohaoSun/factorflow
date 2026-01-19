@@ -5,7 +5,6 @@ The agent should update this file to reflect the project status.
 ## Project Structure
 
 - `src/`: Source code directory.
-- `notebooks/`: Exploratory code directory.
 - `pyproject.toml`: Project configuration and dependencies (managed by uv/hatch).
 
 ## Development Guidelines
