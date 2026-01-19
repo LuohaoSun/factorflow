@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10,<3.13"
 
 dependencies = [
+  "numba>=0.59.0",
   "numpy",
   "scipy",
   "pandas",
@@ -17,9 +18,9 @@ dependencies = [
   "shap",
   "matplotlib",
   "seaborn",
-    "mlflow",
-    "loguru",
-    "feature-engine",
+  "mlflow",
+  "loguru",
+  "feature-engine",
 ]
 
 [project.optional-dependencies]
