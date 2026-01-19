@@ -1,0 +1,24 @@
+# Docker 构建忽略文件
+# 防止本地的虚拟环境覆盖容器内的环境
+.venv/
+venv/
+env/
+
+# Python 缓存文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# IDE 配置
+.idea/
+.vscode/
+*.swp
+
+# macOS 系统文件
+.DS_Store
+
+# 注意：不要排除 .git，因为构建过程中需要读取 git 历史来生成动态版本号
+# .git/

@@ -1,0 +1,99 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling", "hatch-vcs"]
+
+[project]
+name = "my-lib"
+description = "my awesome project description"
+dynamic = ["version"]
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = ["numpy", "scipy", "pandas", "scikit_learn"]
+
+[project.optional-dependencies]
+dev = [
+  "ipykernel",
+  "matplotlib",
+  "seaborn",
+  "pre-commit",
+  "pyright",
+]
+
+[tool.hatch.envs.default]
+installer = "uv"
+features = ["dev"]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/my_lib"]
+
+[tool.uv]
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+[tool.pyright]
+typeCheckingMode = "basic"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+indent-width = 4
+src = ["src"]
+exclude = ["tests"]
+
+[tool.ruff.lint]
+select = [
+  "E",      # 常用规则集：
+  "F",      # E,F: pycodestyle/pyflakes（基础语法/错误）
+  "W",      # W: warnings（警告）
+  "I",      # I: isort（导入排序）
+  "N",      # N: pep8-naming（命名规范）
+  "B",      # B: flake8-bugbear（潜在缺陷）
+  "C4",     # C4: flake8-comprehensions（推导式优化）
+  "D",      # D: pydocstyle（文档字符串）
+  "PTH",    # PTH: pydocstyle（文档字符串）
+  "SIM",    # SIM: flake8-simplify（简化代码）
+  "UP",     # UP: pyupgrade（升级到更现代的 Python 语法）
+  "PERF",   # PERF: perflint（简单的性能建议）
+  "RUF",    # RUF: ruff（ruff 相关）
+  "ANN001", # 函数的参数类型注解
+  "ANN201", # 公共函数返回值类型注解
+  "PD",     # pandas 相关
+  "NPY",    # numpy 相关
+]
+
+ignore = [
+  "N803",   # 接受X作为变量名(sklearn)
+  "N806",   # 接受X作为变量名(sklearn)
+  "RUF001", # 接受中文标点
+  "RUF002", # 接受中文标点
+  "RUF003", # 接受中文标点
+  "D100",
+  "D104",
+  "D105",
+  "D106",
+  "D203",
+  "D213",
+  "D301",
+  "D400",   # 文档字符串首行结尾无需句号
+  "D413",   # 文档字符串末尾无需空行
+  "D415",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+force-sort-within-sections = true
+combine-as-imports = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
+docstring-code-format = true
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
