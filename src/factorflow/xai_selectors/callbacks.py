@@ -119,9 +119,11 @@ def create_oof_shap_figures(
         return {}
 
     try:
-        data_source = getattr(selector, "shap_data_oof_", None) or X
+        data_source = getattr(selector, "shap_data_oof_", None)
         base_values_oof = getattr(selector, "base_values_oof_", None)
         n_splits = getattr(selector, "n_splits", "?")
+        assert data_source is not None
+        assert base_values_oof is not None
 
         explanation = shap.Explanation(
             values=shap_values_oof[valid_mask],

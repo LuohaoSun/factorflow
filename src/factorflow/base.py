@@ -290,11 +290,6 @@ class Selector(BaseEstimator, SelectorMixin):
         """获取输入特征名称列表."""
         return np.array(self.feature_names_in_)
 
-    @final
-    def get_feature_names_out(self) -> np.ndarray:
-        """获取输出特征名称列表."""
-        return np.array(self.selected_features_)
-
     # ============================== fluent API ==============================
     def set_label(self, label: str) -> "Selector":
         """设置此选择器的标签, 用于在打印检查结果时显示.
@@ -393,6 +388,12 @@ class Selector(BaseEstimator, SelectorMixin):
         # Ensure selected_features_ is set by _fit
         if not hasattr(self, "selected_features_"):
             raise AttributeError(f"[{self.label}] _fit() must set self.selected_features_")
+
+        # Reorder selected_features_ to match input feature order
+        # This prevents mismatch between transform() output (which preserves order)
+        # and get_feature_names_out() if the latter just returns selected_features_
+        selected_set = set(self.selected_features_)
+        self.selected_features_ = [f for f in self.feature_names_in_ if f in selected_set]
 
         # --- Post-fit Callbacks ---
         for cb in self.callbacks:
