@@ -56,7 +56,7 @@ def _calc_multigroup_mode(
     # Metric 2: Max Mean Range
     diff_mean_range = np.max(group_means) - np.min(group_means)
 
-    # Metric 3: Kruskal-Wallis ANOVA
+    # Metric 3: Kruskal-Wallis H-test
     try:
         _, p_val = stats.kruskal(*group_data_map.values())
     except ValueError:
@@ -66,9 +66,9 @@ def _calc_multigroup_mode(
         "feature": feat,
         "drift_score": drift_score,
         "diff_mean_range": diff_mean_range,
-        "p_value_anova": p_val,
+        "p_value_kw": p_val,
     }
-    for g, m in zip(unique_groups, group_means, strict=False):
+    for g, m in zip(unique_groups, group_means, strict=True):
         res[f"mean_{g}"] = m
     return res
 
@@ -97,6 +97,7 @@ def grouped_shap_diff(
 
     Returns:
         pd.DataFrame: 包含 drift_score, diff_mean, p_value 等指标，按 drift_score 降序排列。
+        注意：返回的 p_value 未经多重假设检验校正 (Unadjusted for Multiple Testing)。
 
     Raises:
         ValueError: 当计算复杂度过高或组数过多时抛出。
@@ -112,6 +113,12 @@ def grouped_shap_diff(
 
     groups = pd.Series(groups).reset_index(drop=True)
     df = df.reset_index(drop=True)
+
+    if len(df) != len(groups):
+        raise ValueError(
+            f"Input length mismatch: shap_values has {len(df)} rows, but groups has {len(groups)} elements."
+        )
+
     unique_groups = groups.unique()
     n_features = len(df.columns)
     n_groups = len(unique_groups)
