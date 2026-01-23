@@ -192,7 +192,7 @@ class Selector(BaseEstimator, SelectorMixin):
 
     # 类型提示
     selected_features_: list[str]
-    feature_names_in_: list[str]
+    feature_names_in_: np.ndarray
     n_features_in_: int
     _input_shape: tuple[int, ...]
     callbacks: list[Callback]
@@ -375,7 +375,7 @@ class Selector(BaseEstimator, SelectorMixin):
             )
             y = y.iloc[:, 0]
 
-        self.feature_names_in_ = X.columns.tolist()
+        self.feature_names_in_ = np.array(X.columns.tolist())
         self.n_features_in_ = len(self.feature_names_in_)
         self._input_shape = X.shape
 
@@ -406,7 +406,7 @@ class Selector(BaseEstimator, SelectorMixin):
     @final
     def _get_support_mask(self) -> np.ndarray:
         selected_set = set(self.selected_features_)
-        mask = np.array([(f in selected_set) for f in self.feature_names_in_])
+        mask = np.array([(str(f) in selected_set) for f in self.feature_names_in_])
         return mask
 
     @property

@@ -115,7 +115,7 @@ class SelectFromModelShapCV(Selector):
 
         if k is not None:
             if k >= n_features:
-                return self.feature_names_in_
+                return self.feature_names_in_.tolist()
             if k <= 0:
                 return []
 
