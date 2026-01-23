@@ -389,17 +389,15 @@ class Selector(BaseEstimator, SelectorMixin):
         if not hasattr(self, "selected_features_"):
             raise AttributeError(f"[{self.label}] _fit() must set self.selected_features_")
 
-        # Reorder selected_features_ to match input feature order
-        # This prevents mismatch between transform() output (which preserves order)
-        # and get_feature_names_out() if the latter just returns selected_features_
-        selected_set = set(self.selected_features_)
-        self.selected_features_ = [f for f in self.feature_names_in_ if f in selected_set]
-
         # --- Post-fit Callbacks ---
         for cb in self.callbacks:
             cb.on_fit_end(self, X, y)
 
         return self
+
+    @final
+    def get_feature_names_out(self) -> np.ndarray:  # noqa: D102
+        return super().get_feature_names_out()
 
     @final
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:  # noqa: D102
