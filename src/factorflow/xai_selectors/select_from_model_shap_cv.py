@@ -169,7 +169,7 @@ class SelectFromModelShapCV(Selector):
 
             # 计算这一折的 SHAP 值
             explainer = shap.Explainer(model, X_train)
-            explanation = explainer(X_shap)
+            explanation = explainer(X_shap, check_additivity=False)
             shap_vals, base_vals = self._process_shap_output(explanation)
 
             # 存储至 OOF 矩阵

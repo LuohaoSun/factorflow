@@ -147,7 +147,7 @@ class SelectFromModelShapNullImportance(Selector):
                 X_shap_val = X_val.sample(n=self.shap_sample_size, random_state=rng)
 
             explainer = shap.Explainer(model, X_train)
-            explanation = explainer(X_shap_val)
+            explanation = explainer(X_shap_val, check_additivity=False)
 
             shap_vals, _ = self._process_shap_output(explanation)
             null_imp = np.abs(shap_vals).mean(axis=0)
