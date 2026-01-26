@@ -153,6 +153,65 @@ def create_oof_shap_figures(
         return {}
 
 
+def create_regression_plots(selector: Any, y_true: Any) -> dict[str, Figure]:
+    """Create regression specific plots (Predicted vs Actual, Residuals)."""
+    import seaborn as sns
+
+    y_pred_oof = getattr(selector, "y_preds_oof_", None)
+    if y_pred_oof is None or y_true is None:
+        return {}
+
+    # Filter NaN
+    y_true = np.asarray(y_true)
+    mask = ~pd.isna(y_pred_oof)
+    y_t, y_p = y_true[mask], y_pred_oof[mask]
+
+    if len(y_t) == 0:
+        return {}
+
+    figures = {}
+    try:
+        # Calculate metrics for display
+        r2 = r2_score(y_t, y_p)
+        mae = mean_absolute_error(y_t, y_p)
+
+        # 1. Predicted vs Actual
+        fig_pred = cast(Figure, plt.figure(figsize=(8, 8)))
+        ax = fig_pred.add_subplot(111)
+        ax.scatter(y_t, y_p, alpha=0.5)
+
+        # Add diagonal line
+        min_val = float(np.min([ax.get_xlim(), ax.get_ylim()]))
+        max_val = float(np.max([ax.get_xlim(), ax.get_ylim()]))
+        lims = [min_val, max_val]
+
+        ax.plot(lims, lims, "r--", alpha=0.75, zorder=0)
+        ax.set_aspect("equal")
+        ax.set_xlim(left=min_val, right=max_val)
+        ax.set_ylim(bottom=min_val, top=max_val)
+
+        ax.set_xlabel("Actual Values")
+        ax.set_ylabel("Predicted Values")
+        ax.set_title(f"Predicted vs Actual\nMAE: {mae:.4f} | R2: {r2:.4f}")
+        figures["pred_vs_actual"] = fig_pred
+
+        # 2. Residuals Distribution
+        residuals = y_t - y_p
+        fig_res = cast(Figure, plt.figure(figsize=(10, 6)))
+        ax = fig_res.add_subplot(111)
+        sns.histplot(residuals, kde=True, ax=ax)
+        ax.axvline(x=0, color="r", linestyle="--")
+        ax.set_title("Residuals Distribution")
+        ax.set_xlabel("Residual (Actual - Predicted)")
+        figures["residuals_dist"] = fig_res
+
+        return figures
+
+    except Exception as e:
+        logger.warning(f"Failed to create regression plots: {e}")
+        return {}
+
+
 def create_null_importance_figure(selector: Any, top_k: int = 10) -> Figure | None:
     """Create a figure comparing real vs null importance distributions."""
     import seaborn as sns
@@ -182,7 +241,7 @@ def create_null_importance_figure(selector: Any, top_k: int = 10) -> Figure | No
             ax.axvline(x=float(real_importances[idx]), color="red", linestyle="--", label="Real Imp")
             ax.set_title(f"{feature_names[idx]}\nP-val: {p_values[idx]:.4f}, Ratio: {scores[idx]:.2f}")
 
-        for j in range(i + 1, len(axes)):
+        for j in range(len(top_indices), len(axes)):
             axes[j].axis("off")
         plt.tight_layout()
         return fig
@@ -232,7 +291,7 @@ class CVLogger(Callback):
 
         self._log_console(selector, metrics)
         self._log_mlflow(selector, metrics)
-        self._log_plots(selector, X)
+        self._log_plots(selector, X, y)
 
     def _log_console(self, selector: Selector, metrics: dict[str, Any]):
         if not self.verbose:
@@ -270,7 +329,7 @@ class CVLogger(Callback):
                 artifact_file=f"model/metrics/{label}/oof_confusion_matrix.json",
             )
 
-    def _log_plots(self, selector: Selector, X: pd.DataFrame):
+    def _log_plots(self, selector: Selector, X: pd.DataFrame, y: Any = None):
         show_local = self.verbose >= 2
         save_mlflow = self.log_mlflow and mlflow and mlflow.active_run()
 
@@ -278,6 +337,12 @@ class CVLogger(Callback):
             return
 
         figures = create_oof_shap_figures(selector, X, max_display=self.max_display)
+
+        # Add regression plots
+        task_type = getattr(selector, "task_type", None)
+        if task_type != "classification" and y is not None:
+            figures.update(create_regression_plots(selector, y))
+
         if not figures:
             return
 

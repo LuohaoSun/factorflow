@@ -396,15 +396,15 @@ class Selector(BaseEstimator, SelectorMixin):
         return self
 
     @final
-    def get_feature_names_out(self) -> np.ndarray:  # noqa: D102
-        return super().get_feature_names_out()
+    def get_feature_names_out(self, input_features: np.ndarray | list[str] | None = None) -> np.ndarray:  # noqa: D102
+        return super().get_feature_names_out(input_features=input_features)
 
     @final
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:  # noqa: D102
         return super().transform(X)  # pyright: ignore[reportReturnType]
 
     @final
-    def _get_support_mask(self) -> np.ndarray:
+    def _get_support_mask(self) -> np.ndarray:  # pyright: ignore[reportIncompatibleMethodOverride]
         selected_set = set(self.selected_features_)
         mask = np.array([(str(f) in selected_set) for f in self.feature_names_in_])
         return mask
