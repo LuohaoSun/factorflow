@@ -162,7 +162,7 @@ class FeatureProtectionCallback(Callback):
 
 
 class Selector(BaseEstimator, SelectorMixin):
-    """特征选择器基类 (V2 重构版).
+    """特征选择器基类.
 
     旨在简化自定义特征选择器的开发，提供统一的接口和增强功能。
     它继承自 `sklearn.feature_selection.SelectorMixin`，并默认输出 Pandas DataFrame。

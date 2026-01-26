@@ -1,5 +1,7 @@
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 
+from loguru import logger
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import shap
@@ -11,8 +13,149 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import KFold, StratifiedKFold
 
+try:
+    import mlflow
+except ImportError:
+    mlflow = None
+
 from factorflow.base import Callback, Selector
-from factorflow.xai_selectors.callbacks import CVLogger, FoldEndCallback
+from factorflow.xai_selectors.utils import metrics, visualization
+
+
+@runtime_checkable
+class FoldEndCallback(Protocol):
+    """Protocol for callbacks that implement on_fold_end hook."""
+
+    def on_fold_end(self, selector: Selector, fold: int, logs: dict[str, Any]) -> None:
+        """Handle results at the end of each CV fold."""
+        ...
+
+
+class CVLogger(Callback):
+    """Unified callback for logging CV results to console and MLflow."""
+
+    def __init__(self, verbose: bool | int = True, log_mlflow: bool = True, max_display: int = 20):
+        """Initialize CVLogger."""
+        self.verbose = verbose
+        self.log_mlflow = log_mlflow
+        self.max_display = max_display
+
+    def on_fit_start(self, selector: Selector, X: pd.DataFrame, y: Any = None) -> None:
+        """Handle the beginning of fit."""
+        if self.verbose:
+            n_splits = getattr(selector, "n_splits", "?")
+            logger.info(f"[{selector.label}] Starting {n_splits}-Fold CV SHAP calculation...")
+
+        if self.log_mlflow and mlflow and mlflow.active_run():
+            estimator = getattr(selector, "estimator", None)
+            if estimator:
+                mlflow.log_param(f"{selector.label}/estimator_type", estimator.__class__.__name__)
+
+    def on_fold_end(self, selector: Selector, fold: int, logs: dict[str, Any]) -> None:
+        """Handle the results of each fold."""
+        if not self.verbose:
+            return
+
+        score, auc = logs.get("score"), logs.get("auc")
+        msg = f"Fold {fold + 1}: Score={score:.4f}"
+        if auc is not None and not np.isnan(auc):
+            msg += f", AUC={auc:.4f}"
+        logger.info(msg)
+
+    def on_fit_end(self, selector: Selector, X: pd.DataFrame, y: Any = None) -> None:
+        """Handle the end of fit (Metrics & Plots)."""
+        # Only compute metrics if it's a CV selector (has OOF preds)
+        if not hasattr(selector, "y_preds_oof_"):
+            return
+
+        # Safe cast as we are inside the class definition file
+        cv_selector = cast("SelectFromModelShapCV", selector)
+        m = metrics.compute_cv_metrics(cv_selector, y)
+        if not m:
+            return
+
+        self._log_console(cv_selector, m)
+        self._log_mlflow(cv_selector, m)
+        self._log_plots(cv_selector, X, y)
+
+    def _log_console(self, selector: "SelectFromModelShapCV", metrics_dict: dict[str, Any]):
+        if not self.verbose:
+            return
+
+        label = selector.label
+        if "cv_avg_auc" in metrics_dict:
+            logger.info(f"[{label}] Average AUC (per fold): {metrics_dict['cv_avg_auc']:.4f}")
+
+        if metrics_dict["task_type"] == "classification":
+            logger.info(f"[{label}] OOF Global Accuracy: {metrics_dict['oof_accuracy']:.4f}")
+            if "confusion_matrix_df" in metrics_dict:
+                logger.info(f"[{label}] OOF Confusion Matrix:\n{metrics_dict['confusion_matrix_df']}")
+            if "oof_auc" in metrics_dict:
+                logger.info(f"[{label}] OOF Global AUC: {metrics_dict['oof_auc']:.4f}")
+        else:
+            logger.info(f"[{label}] OOF Global MAE: {metrics_dict['oof_mae']:.4f}, R2: {metrics_dict['oof_r2']:.4f}")
+
+    def _log_mlflow(self, selector: "SelectFromModelShapCV", metrics_dict: dict[str, Any]):
+        if not (self.log_mlflow and mlflow and mlflow.active_run()):
+            return
+
+        # Ensure mlflow is not None for type checker
+        if mlflow is None:
+            return
+
+        label = selector.label
+        for k, v in metrics_dict.items():
+            if isinstance(v, int | float | np.number):
+                mlflow.log_metric(f"{label}/{k}", float(v))
+
+        if "confusion_matrix_df" in metrics_dict:
+            mlflow.log_table(
+                data=metrics_dict["confusion_matrix_df"].reset_index(),
+                artifact_file=f"model/metrics/{label}/oof_confusion_matrix.json",
+            )
+
+    def _log_plots(self, selector: "SelectFromModelShapCV", X: pd.DataFrame, y: Any = None):
+        show_local = self.verbose >= 2
+        save_mlflow = self.log_mlflow and mlflow and mlflow.active_run()
+
+        if not (show_local or save_mlflow):
+            return
+
+        figures = {}
+
+        # 1. SHAP Plots
+        if selector.shap_values_oof_ is not None and selector.shap_data_oof_ is not None:
+            figures.update(
+                visualization.create_shap_plots(
+                    shap_values=selector.shap_values_oof_,
+                    data=selector.shap_data_oof_,
+                    base_values=selector.base_values_oof_,
+                    n_splits=getattr(selector, "n_splits", "?"),
+                    max_display=self.max_display,
+                )
+            )
+
+        # 2. Regression Plots
+        task_type = getattr(selector, "task_type", None)
+        y_pred_oof = getattr(selector, "y_preds_oof_", None)
+        if task_type != "classification" and y is not None and y_pred_oof is not None:
+            figures.update(visualization.create_regression_plots(y_true=y, y_pred=y_pred_oof))
+
+        if not figures:
+            return
+
+        if save_mlflow and mlflow is not None:
+            artifact_dir = f"model/plots/{selector.label}"
+            for name, fig in figures.items():
+                mlflow.log_figure(fig, f"{artifact_dir}/{name}.png")
+            logger.info(f"[{selector.label}] SHAP plots recorded to MLflow artifact path: {artifact_dir}")
+
+        if show_local:
+            for _fig in figures.values():
+                plt.show()
+
+        for fig in figures.values():
+            plt.close(fig)
 
 
 class SelectFromModelShapCV(Selector):

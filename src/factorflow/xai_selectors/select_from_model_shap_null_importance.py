@@ -1,6 +1,7 @@
 from typing import Any, Literal, cast
 
 from loguru import logger
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import shap
@@ -8,10 +9,101 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.model_selection import train_test_split
 from tqdm.auto import tqdm
 
-from factorflow.base import Callback, Selector
-from factorflow.xai_selectors.callbacks import NullImportanceLogger
+try:
+    import mlflow
+except ImportError:
+    mlflow = None
 
-from .select_from_model_shap_cv import SelectFromModelShapCV
+from factorflow.base import Callback, Selector
+from factorflow.xai_selectors.select_from_model_shap_cv import SelectFromModelShapCV
+from factorflow.xai_selectors.utils import visualization
+
+
+class NullImportanceLogger(Callback):
+    """Unified callback for Null Importance logging and plotting."""
+
+    def __init__(self, verbose: bool | int = True, log_mlflow: bool = True, max_display: int = 20):
+        """Initialize NullImportanceLogger."""
+        self.verbose = verbose
+        self.log_mlflow = log_mlflow
+        self.max_display = max_display
+
+    def on_fit_end(self, selector: Selector, X: pd.DataFrame, y: Any = None) -> None:
+        """Handle results of Null Importance selection."""
+        # Only process if selector has null importance attributes
+        if not hasattr(selector, "real_importances_"):
+            return
+
+        null_selector = cast("SelectFromModelShapNullImportance", selector)
+        self._log_console(null_selector)
+        self._log_mlflow(null_selector)
+        self._log_plots(null_selector)
+
+    def _log_console(self, selector: "SelectFromModelShapNullImportance"):
+        if not self.verbose:
+            return
+
+        # Safe access using specific type
+        real_imp = selector.real_importances_
+        p_vals = selector.p_values_
+        scores = selector.scores_
+        features = selector.feature_names_in_
+
+        if real_imp is None or p_vals is None or scores is None:
+            return
+
+        df = pd.DataFrame(
+            {
+                "feature": features,
+                "real_imp": real_imp,
+                "p_value": p_vals,
+                "ratio": scores,
+            }
+        )
+        top_df = df.sort_values(["p_value", "real_imp"], ascending=[True, False]).head(10)
+        logger.info(f"[{selector.label}] Null Importance Summary (Top 10):\n{top_df.to_string(index=False)}")
+
+    def _log_mlflow(self, selector: "SelectFromModelShapNullImportance"):
+        if not (self.log_mlflow and mlflow and mlflow.active_run()):
+            return
+
+        if mlflow is not None:
+            # Note: selector.selected_features_ comes from base Selector
+            mlflow.log_metric(f"{selector.label}_selected_count", len(selector.selected_features_))
+
+    def _log_plots(self, selector: "SelectFromModelShapNullImportance"):
+        show_local = self.verbose >= 2
+        save_mlflow = self.log_mlflow and mlflow and mlflow.active_run()
+
+        if not (show_local or save_mlflow):
+            return
+
+        real_imp = selector.real_importances_
+        null_dist = selector.null_importances_distribution_
+        if real_imp is None or null_dist is None or selector.p_values_ is None or selector.scores_ is None:
+            return
+
+        fig = visualization.create_null_importance_plot(
+            real_importances=real_imp,
+            null_dist=null_dist,
+            feature_names=selector.feature_names_in_.tolist(),
+            p_values=selector.p_values_,
+            scores=selector.scores_,
+            top_k=self.max_display,
+        )
+
+        if not fig:
+            return
+
+        if save_mlflow and mlflow is not None:
+            artifact_path = f"model/plots/{selector.label}/null_importance_dist.png"
+            mlflow.log_figure(fig, artifact_path)
+            logger.info(f"[{selector.label}] Null importance distribution recorded to MLflow: {artifact_path}")
+
+        if show_local:
+            plt.show()
+
+        plt.close(fig)
 
 
 class SelectFromModelShapNullImportance(Selector):
