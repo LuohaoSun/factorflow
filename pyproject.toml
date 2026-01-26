@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["ipykernel", "pre-commit", "pyright", "pytest", "ruff"]
+dev = ["ipykernel", "pre-commit", "basedpyright", "pytest", "ruff"]
 
 [tool.hatch.envs.default]
 installer = "uv"
@@ -36,11 +36,11 @@ source = "vcs"
 [tool.hatch.build.targets.wheel]
 packages = ["src/factorflow"]
 
-[tool.uv]
-index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+# [tool.uv]
+# index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
-[tool.pyright]
-typeCheckingMode = "basic"
+[tool.basedpyright]
+typeCheckingMode = "standard"
 
 [tool.ruff]
 target-version = "py310"
