@@ -2,19 +2,17 @@
 
 一个用于特征重要性分析的 Python 库。
 
-## 设计原则
+## Core Design Principle
 
-1. 特征重要性分析作为特征工程的一部分. 所有特征重要性分析过程均以特征选择的形式
-   进行, 并通过副作用产出分析结果(例如 SHAP 图).
-2. 采用统一的 sklearn API.
+> `特征重要性分析`作为`特征工程`的一部分, 具体而言, 作为`特征选择`的**副作用**.
 
-## 安装
+## Installation
 
 ```bash
 pip install git+https://github.com/luohaosun/factorflow.git
 ```
 
-## 使用
+## Examples
 
 1. 使用五折交叉验证计算 shap 值, 并选择重要性最高的 2 个特征:
 
