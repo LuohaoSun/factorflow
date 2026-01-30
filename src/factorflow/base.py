@@ -4,7 +4,7 @@ from datetime import datetime
 import fnmatch
 import inspect
 import re
-from typing import TYPE_CHECKING, Any, Literal, final
+from typing import Any, Literal, final
 import warnings
 
 from loguru import logger
@@ -13,10 +13,6 @@ import pandas as pd
 from sklearn.base import BaseEstimator
 from sklearn.feature_selection import SelectorMixin
 from sklearn.utils.validation import check_is_fitted
-
-if TYPE_CHECKING:
-    # Forward reference for type checking
-    pass
 
 
 class Callback:
