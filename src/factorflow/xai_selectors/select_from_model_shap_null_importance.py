@@ -130,7 +130,7 @@ class SelectFromModelShapNullImportance(Selector):
     p_values_: np.ndarray
     scores_: np.ndarray
     shap_values_: np.ndarray
-    feature_importances_: pd.Series
+    feature_importances_: pd.Series = None  # type: ignore
 
     def __init__(
         self,

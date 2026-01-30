@@ -185,7 +185,7 @@ class SelectFromModelShapCV(Selector):
     shap_data_oof_: pd.DataFrame | None
     y_preds_oof_: np.ndarray
     y_proba_oof_: np.ndarray | None
-    feature_importances_: pd.Series
+    feature_importances_: pd.Series = None  # type: ignore
     fold_auc_scores_: list[float]
 
     def __init__(
@@ -324,7 +324,7 @@ class SelectFromModelShapCV(Selector):
 
             # 触发单折回调 (on_fold_end)
             fold_logs = {"score": score, "auc": auc}
-            for cb in self.callbacks:
+            for cb in self._callbacks:
                 if isinstance(cb, FoldEndCallback):
                     cb.on_fold_end(self, fold_idx, fold_logs)
 

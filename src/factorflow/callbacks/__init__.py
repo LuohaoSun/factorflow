@@ -5,8 +5,9 @@ This module is intended for callbacks that require additional dependencies
 for the core base module.
 """
 
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
+from loguru import logger
 import matplotlib.pyplot as plt
 import mlflow
 import numpy as np
@@ -14,6 +15,14 @@ import pandas as pd
 import seaborn as sns
 
 from factorflow.base import Callback, CheckFeatures, CheckXShape, ProtectFeatures, Selector
+
+
+@runtime_checkable
+class HasFeatureImportances(Protocol):
+    """Protocol for selectors that provide feature importances."""
+
+    feature_importances_: pd.Series | np.ndarray | pd.DataFrame
+
 
 __all__ = [
     "Callback",
@@ -66,6 +75,14 @@ class LogXYScatterPlot(Callback):
         self.top_k = top_k
         self.alpha = alpha
 
+    def on_add_callback(self, selector: Selector) -> None:
+        """Check if selector has feature_importances_."""
+        if not isinstance(selector, HasFeatureImportances):
+            logger.warning(
+                f"[{selector.__class__.__name__}] LogXYScatterPlot requires feature_importances_ "
+                "for top_k feature selection. Falling back to selection order."
+            )
+
     def on_fit_end(self, selector: Selector, X: pd.DataFrame, y: Any = None) -> None:
         """Plot scatter plots after fit."""
         if y is None:
@@ -111,6 +128,14 @@ class LogCorrelationHeatmap(Callback):
         self.top_k = top_k
         self.cmap = cmap
         self.include_y = include_y
+
+    def on_add_callback(self, selector: Selector) -> None:
+        """Check if selector has feature_importances_."""
+        if not isinstance(selector, HasFeatureImportances):
+            logger.warning(
+                f"[{selector.__class__.__name__}] LogCorrelationHeatmap requires feature_importances_ "
+                "for top_k feature selection. Falling back to selection order."
+            )
 
     def on_fit_end(self, selector: Selector, X: pd.DataFrame, y: Any = None) -> None:
         """Plot correlation heatmap after fit."""

@@ -18,6 +18,13 @@ from sklearn.utils.validation import check_is_fitted
 class Callback:
     """Base class for FactorFlow Selectors callbacks."""
 
+    def on_add_callback(self, selector: "Selector") -> None:
+        """Handle when the callback is added to a selector.
+
+        This can be used to check compatibility or initialize state.
+        """
+        pass
+
     def on_fit_start(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
         """Handle the beginning of fit."""
         pass
@@ -191,7 +198,7 @@ class Selector(BaseEstimator, SelectorMixin):
     feature_names_in_: np.ndarray
     n_features_in_: int
     _input_shape: tuple[int, ...]
-    callbacks: list[Callback]
+    _callbacks: list[Callback]
 
     def __init__(
         self,
@@ -220,10 +227,15 @@ class Selector(BaseEstimator, SelectorMixin):
         self.selection_check = selection_check
         self.check_features_patterns = check_features_patterns
         self.label = label
-        self.callbacks = callbacks or []
+        self._callbacks = []
+        _initial_callbacks = callbacks or []
 
         # 初始化基于参数的 Callbacks
         self._init_param_callbacks()
+
+        # 添加初始传入的 Callbacks
+        for cb in _initial_callbacks:
+            self.add_callback(cb)
 
     def _init_param_callbacks(self):
         """将构造函数参数转换为 Callbacks."""
@@ -238,18 +250,33 @@ class Selector(BaseEstimator, SelectorMixin):
             cb = self._ensure_callback(ProtectFeatures)
             cb.add_patterns(self.protected_features_patterns)
 
+    def add_callback(self, callback: Callback) -> "Selector":
+        """添加回调函数.
+
+        Args:
+        ----
+            callback: 回调对象.
+
+        Returns:
+        -------
+            self
+        """
+        self._callbacks.append(callback)
+        callback.on_add_callback(self)
+        return self
+
     def _ensure_callback(self, callback_cls: type) -> Any:
         """确保特定类型的 Callback 存在，如果不存在则创建并添加."""
-        for cb in self.callbacks:
+        for cb in self._callbacks:
             if isinstance(cb, callback_cls):
                 return cb
         new_cb = callback_cls()
-        self.callbacks.append(new_cb)
+        self.add_callback(new_cb)
         return new_cb
 
     def _remove_callback(self, callback_cls: type):
         """移除特定类型的 Callback."""
-        self.callbacks = [cb for cb in self.callbacks if not isinstance(cb, callback_cls)]
+        self._callbacks = [cb for cb in self._callbacks if not isinstance(cb, callback_cls)]
 
     # ============================== abstract methods ==============================
     @abstractmethod
@@ -376,7 +403,7 @@ class Selector(BaseEstimator, SelectorMixin):
         self._input_shape = X.shape
 
         # --- Pre-fit Callbacks ---
-        for cb in self.callbacks:
+        for cb in self._callbacks:
             cb.on_fit_start(self, X, y)
 
         self._fit(X, y, **kwargs)
@@ -386,7 +413,7 @@ class Selector(BaseEstimator, SelectorMixin):
             raise AttributeError(f"[{self.label}] _fit() must set self.selected_features_")
 
         # --- Post-fit Callbacks ---
-        for cb in self.callbacks:
+        for cb in self._callbacks:
             cb.on_fit_end(self, X, y)
 
         return self
