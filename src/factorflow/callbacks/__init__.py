@@ -13,17 +13,16 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from factorflow.base import Callback, FeatureCheckCallback, FeatureProtectionCallback, Selector, ShapeCheckCallback
+from factorflow.base import Callback, CheckFeatures, CheckXShape, ProtectFeatures, Selector
 
 __all__ = [
     "Callback",
-    "FeatureCheckCallback",
-    "FeatureProtectionCallback",
+    "CheckFeatures",
+    "CheckXShape",
     "LogCorrelationHeatmap",
     "LogFeatureTargetScatterPlot",
     "LogTargetDist",
-    "Selector",
-    "ShapeCheckCallback",
+    "ProtectFeatures",
 ]
 
 

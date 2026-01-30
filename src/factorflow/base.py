@@ -27,7 +27,7 @@ class Callback:
         pass
 
 
-class ShapeCheckCallback(Callback):
+class CheckXShape(Callback):
     """Callback to log shape of X before and after fit."""
 
     def on_fit_start(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
@@ -45,7 +45,7 @@ class ShapeCheckCallback(Callback):
             logger.warning(f"[{selector.label}] (post_fit) Could not determine output shape: {e}")
 
 
-class FeatureCheckCallback(Callback):
+class CheckFeatures(Callback):
     """Callback to check for presence of specific features."""
 
     def __init__(self, patterns: list[str] | None = None):
@@ -100,7 +100,7 @@ class FeatureCheckCallback(Callback):
             logger.info(f"[{selector.label}] ({stage}) Feature Checks: " + "; ".join(summary))
 
 
-class FeatureProtectionCallback(Callback):
+class ProtectFeatures(Callback):
     """Callback to identify protected features."""
 
     def __init__(self, patterns: list[str] | None = None):
@@ -228,14 +228,14 @@ class Selector(BaseEstimator, SelectorMixin):
     def _init_param_callbacks(self):
         """将构造函数参数转换为 Callbacks."""
         if self.selection_check:
-            self._ensure_callback(ShapeCheckCallback)
+            self._ensure_callback(CheckXShape)
 
         if self.check_features_patterns:
-            cb = self._ensure_callback(FeatureCheckCallback)
+            cb = self._ensure_callback(CheckFeatures)
             cb.add_patterns(self.check_features_patterns)
 
         if self.protected_features_patterns:
-            cb = self._ensure_callback(FeatureProtectionCallback)
+            cb = self._ensure_callback(ProtectFeatures)
             cb.add_patterns(self.protected_features_patterns)
 
     def _ensure_callback(self, callback_cls: type) -> Any:
@@ -301,9 +301,9 @@ class Selector(BaseEstimator, SelectorMixin):
         """设置此选择器需要在 fit 前后检查特征数量变化."""
         self.selection_check = selection_check
         if selection_check:
-            self._ensure_callback(ShapeCheckCallback)
+            self._ensure_callback(CheckXShape)
         else:
-            self._remove_callback(ShapeCheckCallback)
+            self._remove_callback(CheckXShape)
         return self
 
     def check_features(
@@ -329,7 +329,7 @@ class Selector(BaseEstimator, SelectorMixin):
         self.check_features_patterns.append(feature_pattern)
 
         # Update callback
-        cb = self._ensure_callback(FeatureCheckCallback)
+        cb = self._ensure_callback(CheckFeatures)
         cb.add_patterns(feature_pattern)
         return self
 
@@ -355,7 +355,7 @@ class Selector(BaseEstimator, SelectorMixin):
         self.protected_features_patterns = list(current)
 
         # Update callback
-        cb = self._ensure_callback(FeatureProtectionCallback)
+        cb = self._ensure_callback(ProtectFeatures)
         cb.add_patterns(feature_pattern)
         return self
 
