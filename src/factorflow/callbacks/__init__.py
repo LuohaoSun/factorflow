@@ -20,8 +20,8 @@ __all__ = [
     "CheckFeatures",
     "CheckXShape",
     "LogCorrelationHeatmap",
-    "LogFeatureTargetScatterPlot",
-    "LogTargetDist",
+    "LogXYScatterPlot",
+    "LogYDist",
     "ProtectFeatures",
 ]
 
@@ -52,7 +52,7 @@ def _get_top_features(selector: Selector, top_k: int) -> list[str]:
     return top_features
 
 
-class LogFeatureTargetScatterPlot(Callback):
+class LogXYScatterPlot(Callback):
     """Plot scatter plots for top features vs target."""
 
     def __init__(self, top_k: int = 10, alpha: float = 0.5):
@@ -140,7 +140,7 @@ class LogCorrelationHeatmap(Callback):
         plt.close(fig)
 
 
-class LogTargetDist(Callback):
+class LogYDist(Callback):
     """Plot distribution of the target variable."""
 
     def on_fit_start(self, selector: Selector, X: pd.DataFrame, y: Any = None) -> None:
