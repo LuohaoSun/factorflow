@@ -39,8 +39,8 @@ packages = ["src/factorflow"]
 # [tool.uv]
 # index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
-[tool.basedpyright]
-typeCheckingMode = "standard"
+[tool.pyright]
+typeCheckingMode = "basic"
 
 [tool.ruff]
 target-version = "py310"

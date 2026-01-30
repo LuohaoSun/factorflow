@@ -185,7 +185,7 @@ class SelectFromModelShapCV(Selector):
     shap_data_oof_: pd.DataFrame | None
     y_preds_oof_: np.ndarray
     y_proba_oof_: np.ndarray | None
-    feature_importances_: np.ndarray
+    feature_importances_: pd.Series
     fold_auc_scores_: list[float]
 
     def __init__(
@@ -242,38 +242,32 @@ class SelectFromModelShapCV(Selector):
         self.model_fit_params = model_fit_params
         self.store_shap_data = store_shap_data
 
-    def _get_selected_features(self) -> list[str]:
+    def _get_selected_features(self) -> list:
         """根据 OOF SHAP 重要性排序返回选中的特征列表."""
-        importances = self.feature_importances_
-        n_features = len(importances)
-
         if self.n_features_to_select is None:
-            k = None
-        elif isinstance(self.n_features_to_select, int):
-            k = self.n_features_to_select
-        elif isinstance(self.n_features_to_select, float) and 0.0 < self.n_features_to_select < 1.0:
-            k = int(n_features * self.n_features_to_select)
-        else:
-            raise ValueError(f"Invalid n_features_to_select: {self.n_features_to_select}")
+            # 保留重要性 > 0 的特征
+            return self.feature_importances_[self.feature_importances_ > 0].index.tolist()  # pyright: ignore[reportAttributeAccessIssue]
 
-        if k is not None:
-            if k >= n_features:
-                return self.feature_names_in_.tolist()
-            if k <= 0:
-                return []
+        n_features = len(self.feature_importances_)
+        k = self.n_features_to_select
 
-            sorted_indices = np.argsort(importances)
-            selected_indices = sorted_indices[-k:]
-            return self.get_feature_names_in()[selected_indices].tolist()
+        if isinstance(k, float) and 0.0 < k < 1.0:
+            k = int(n_features * k)
+        elif not isinstance(k, int):
+            raise ValueError(f"Invalid n_features_to_select: {k}")
 
-        return self.get_feature_names_in()[importances > 0.0].tolist()
+        if k >= n_features:
+            return self.feature_importances_.index.tolist()
+        if k <= 0:
+            return []
+
+        # feature_importances_ 保持原始顺序，使用 nlargest 筛选
+        return self.feature_importances_.nlargest(k).index.tolist()
 
     @property
-    def feature_names_sorted_(self) -> list[str]:
+    def feature_names_sorted_(self) -> list:
         """按平均绝对 SHAP 值从大到小排序后的完整特征列表."""
-        importances = self.feature_importances_
-        indices = np.argsort(importances)[::-1]
-        return self.get_feature_names_in()[indices].tolist()
+        return self.feature_importances_.sort_values(ascending=False).index.tolist()
 
     def _fit(self, X: pd.DataFrame, y: Any = None, **kwargs: Any) -> "SelectFromModelShapCV":
         """执行交叉验证并收集全量 OOF SHAP 值."""
@@ -335,7 +329,8 @@ class SelectFromModelShapCV(Selector):
                     cb.on_fold_end(self, fold_idx, fold_logs)
 
         # 3. 后处理: 计算全局重要性
-        self.feature_importances_ = np.nanmean(np.abs(self.shap_values_oof_), axis=0)
+        importances_arr = np.nanmean(np.abs(self.shap_values_oof_), axis=0)
+        self.feature_importances_ = pd.Series(importances_arr, index=self.feature_names_in_)
         self.selected_features_ = self._get_selected_features()
 
         return self

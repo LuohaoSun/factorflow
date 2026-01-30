@@ -130,6 +130,7 @@ class SelectFromModelShapNullImportance(Selector):
     p_values_: np.ndarray
     scores_: np.ndarray
     shap_values_: np.ndarray
+    feature_importances_: pd.Series
 
     def __init__(
         self,
@@ -207,7 +208,10 @@ class SelectFromModelShapNullImportance(Selector):
         base_selector.fit(X, y)
 
         self.shap_values_ = base_selector.shap_values_oof_
-        self.real_importances_ = base_selector.feature_importances_
+        # base_selector.feature_importances_ 是 Series, 取 values 以保持 numpy 兼容性
+        # 注意: Series 已经排过序了, 但 feature_names_in_ 是原始顺序
+        # 所以必须用 loc[] 重新对齐到 feature_names_in_ 的顺序
+        self.real_importances_ = base_selector.feature_importances_.loc[self.feature_names_in_].to_numpy()
 
         # 2. Null Runs
         null_imps_list = []
@@ -283,4 +287,7 @@ class SelectFromModelShapNullImportance(Selector):
         self.scores_ = self.real_importances_ / safe_mean_null
 
         # 统一基类所需的重要性属性
-        self.feature_importances_ = self.real_importances_
+        # 根据 mode 选择合适的指标作为"分数"，越高越好
+        imp_values = 1.0 - self.p_values_ if self.mode == "p_value" else self.scores_
+
+        self.feature_importances_ = pd.Series(imp_values, index=self.feature_names_in_)
