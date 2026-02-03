@@ -222,14 +222,8 @@ class SelectFromModelShapCV(Selector):
             **kwargs: 透传给父类 BaseSelector 的参数.
         """
         # 初始化统一的 CVLogger
-        default_callbacks: list[Callback] = [
-            CVLogger(verbose=verbose, max_display=max_display),
-        ]
 
-        user_callbacks: list[Callback] = kwargs.pop("callbacks", []) or []
-        all_callbacks = default_callbacks + user_callbacks
-
-        super().__init__(callbacks=all_callbacks, **kwargs)
+        super().__init__(**kwargs)
         self.estimator = estimator
         self.task_type = task_type
         self.n_features_to_select = n_features_to_select
@@ -241,6 +235,7 @@ class SelectFromModelShapCV(Selector):
         self.max_display = max_display
         self.model_fit_params = model_fit_params
         self.store_shap_data = store_shap_data
+        self.add_callback(CVLogger(verbose=verbose, max_display=max_display))
 
     def _get_selected_features(self) -> list:
         """根据 OOF SHAP 重要性排序返回选中的特征列表."""
