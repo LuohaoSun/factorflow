@@ -23,7 +23,7 @@ dependencies = [
   "feature-engine",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = ["ipykernel", "pre-commit", "basedpyright", "pytest", "ruff"]
 
 [tool.hatch.envs.default]

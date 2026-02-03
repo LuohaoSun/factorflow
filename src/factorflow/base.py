@@ -4,7 +4,7 @@ from datetime import datetime
 import fnmatch
 import inspect
 import re
-from typing import Any, Literal, final
+from typing import Any, Literal, final, override
 import warnings
 
 from loguru import logger
@@ -18,7 +18,7 @@ from sklearn.utils.validation import check_is_fitted
 class Callback:
     """Base class for FactorFlow Selectors callbacks."""
 
-    def on_add_callback(self, selector: "Selector") -> None:
+    def on_callback_add(self, selector: "Selector") -> None:
         """Handle when the callback is added to a selector.
 
         This can be used to check compatibility or initialize state.
@@ -37,10 +37,12 @@ class Callback:
 class CheckXShape(Callback):
     """Callback to log shape of X before and after fit."""
 
+    @override
     def on_fit_start(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
         """Log shape before fit."""
         logger.info(f"[{selector.label}] (pre_fit) X Shape Check: {X.shape}")
 
+    @override
     def on_fit_end(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
         """Log shape after fit."""
         # Note: We calculate output shape based on selected features
@@ -55,6 +57,7 @@ class CheckXShape(Callback):
 class CheckFeatures(Callback):
     """Callback to check for presence of specific features."""
 
+    @override
     def __init__(self, patterns: list[str] | None = None):
         """Initialize FeatureCheckCallback.
 
@@ -76,10 +79,12 @@ class CheckFeatures(Callback):
         else:
             self.patterns.extend(patterns)
 
+    @override
     def on_fit_start(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
         """Check features before fit."""
         self._check(selector, "pre_fit", X.columns.tolist())
 
+    @override
     def on_fit_end(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
         """Check features after fit."""
         # We assume selected_features_ is available after fit
@@ -131,10 +136,12 @@ class ProtectFeatures(Callback):
         else:
             self.patterns.extend(patterns)
 
+    @override
     def on_fit_start(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
         """Calculate protected features based on input columns and patterns."""
         pass
 
+    @override
     def on_fit_end(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
         """Apply protection by adding protected features to selector.selected_features_."""
         if not self.patterns:
@@ -262,7 +269,7 @@ class Selector(BaseEstimator, SelectorMixin):
             self
         """
         self._callbacks.append(callback)
-        callback.on_add_callback(self)
+        callback.on_callback_add(self)
         return self
 
     def _ensure_callback(self, callback_cls: type) -> Any:

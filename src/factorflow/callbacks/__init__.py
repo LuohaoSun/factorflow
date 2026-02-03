@@ -5,7 +5,7 @@ This module is intended for callbacks that require additional dependencies
 for the core base module.
 """
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, override, runtime_checkable
 
 from loguru import logger
 import matplotlib.pyplot as plt
@@ -75,7 +75,8 @@ class LogXYScatterPlot(Callback):
         self.top_k = top_k
         self.alpha = alpha
 
-    def on_add_callback(self, selector: Selector) -> None:
+    @override
+    def on_callback_add(self, selector: Selector) -> None:
         """Check if selector has feature_importances_."""
         if not isinstance(selector, HasFeatureImportances):
             logger.warning(
@@ -83,6 +84,7 @@ class LogXYScatterPlot(Callback):
                 "for top_k feature selection. Falling back to selection order."
             )
 
+    @override
     def on_fit_end(self, selector: Selector, X: pd.DataFrame, y: Any = None) -> None:
         """Plot scatter plots after fit."""
         if y is None:
@@ -129,7 +131,8 @@ class LogCorrelationHeatmap(Callback):
         self.cmap = cmap
         self.include_y = include_y
 
-    def on_add_callback(self, selector: Selector) -> None:
+    @override
+    def on_callback_add(self, selector: Selector) -> None:
         """Check if selector has feature_importances_."""
         if not isinstance(selector, HasFeatureImportances):
             logger.warning(
@@ -137,6 +140,7 @@ class LogCorrelationHeatmap(Callback):
                 "for top_k feature selection. Falling back to selection order."
             )
 
+    @override
     def on_fit_end(self, selector: Selector, X: pd.DataFrame, y: Any = None) -> None:
         """Plot correlation heatmap after fit."""
         top_features = _get_top_features(selector, self.top_k)
@@ -168,6 +172,7 @@ class LogCorrelationHeatmap(Callback):
 class LogYDist(Callback):
     """Plot distribution of the target variable."""
 
+    @override
     def on_fit_start(self, selector: Selector, X: pd.DataFrame, y: Any = None) -> None:
         """Plot target distribution before fit."""
         if y is None:
