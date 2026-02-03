@@ -151,13 +151,8 @@ class SelectFromModelShapNullImportance(Selector):
     ) -> None:
         """初始化 Null Importance 选择器."""
         # 设置默认 Callbacks
-        default_callbacks: list[Callback] = [
-            NullImportanceLogger(verbose=verbose, max_display=max_display),
-        ]
-        user_callbacks: list[Callback] = kwargs.pop("callbacks", []) or []
-        all_callbacks = default_callbacks + user_callbacks
 
-        super().__init__(callbacks=all_callbacks, **kwargs)
+        super().__init__(**kwargs)
         self.estimator = estimator
         self.task_type = task_type
         self.n_trials = n_trials
@@ -171,6 +166,7 @@ class SelectFromModelShapNullImportance(Selector):
         self.max_display = max_display
         self.model_fit_params = model_fit_params
         self.cv = cv
+        self.add_callback(NullImportanceLogger(verbose=verbose, max_display=max_display))
 
     def _get_selected_features(self) -> list[str]:
         """根据显著性测试结果返回选中的特征名称列表."""
