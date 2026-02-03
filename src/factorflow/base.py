@@ -25,11 +25,11 @@ class Callback:
         """
         pass
 
-    def on_fit_start(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
+    def on_fit_start(self, selector: "Selector", X: pd.DataFrame, y: pd.DataFrame | pd.Series | None = None) -> None:
         """Handle the beginning of fit."""
         pass
 
-    def on_fit_end(self, selector: "Selector", X: pd.DataFrame, y: Any = None) -> None:
+    def on_fit_end(self, selector: "Selector", X: pd.DataFrame, y: pd.DataFrame | pd.Series | None = None) -> None:
         """Handle the end of fit."""
         pass
 
