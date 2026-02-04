@@ -14,6 +14,8 @@ pip install git+https://github.com/luohaosun/factorflow.git
 
 ## Examples
 
+> 📚 See [examples](examples) for more details.
+
 1. 使用五折交叉验证计算 shap 值, 并选择重要性最高的 2 个特征:
 
 ```python
@@ -92,7 +94,7 @@ fe_pipeline = make_pipeline(
 fe_pipeline.fit_transform(X, y)
 ```
 
-5. 使用 Callback 扩展功能
+5. 使用 Callback 实现即插即用扩展功能
 
 ```python
 from factorflow.base import Callback, Selector
