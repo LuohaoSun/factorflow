@@ -111,11 +111,14 @@ class LogXYScatterPlot(Callback):
 
         plt.tight_layout()
         if mlflow.active_run():
+            logger.info(f"[{selector.label}] Logging feature target scatter plot to MLflow")
             mlflow.log_figure(
                 fig,
                 f"feature_target_scatter_{selector.label}.png",
                 save_kwargs={"bbox_inches": "tight"},
             )
+        else:
+            plt.show(fig)
         plt.close(fig)
 
 
@@ -169,11 +172,14 @@ class LogCorrelationHeatmap(Callback):
 
         plt.tight_layout()
         if mlflow.active_run():
+            logger.info(f"[{selector.label}] Logging correlation heatmap to MLflow")
             mlflow.log_figure(
                 fig,
                 f"correlation_heatmap_{selector.label}.png",
                 save_kwargs={"bbox_inches": "tight"},
             )
+        else:
+            plt.show(fig)
         plt.close(fig)
 
 
@@ -192,9 +198,12 @@ class LogYDist(Callback):
 
         plt.tight_layout()
         if mlflow.active_run():
+            logger.info(f"[{selector.label}] Logging target distribution to MLflow")
             mlflow.log_figure(
                 fig,
                 f"target_distribution_{selector.label}.png",
                 save_kwargs={"bbox_inches": "tight"},
             )
+        else:
+            plt.show(fig)
         plt.close(fig)

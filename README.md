@@ -95,7 +95,9 @@ fe_pipeline.fit_transform(X, y)
 5. 使用 Callback 扩展功能
 
 ```python
-class PlotYDist:
+from factorflow.base import Callback, Selector
+
+class PlotYDist(Callback):
     """Plot distribution of the target variable."""
 
     def on_fit_start(self, selector: Selector, X: pd.DataFrame, y: Any = None) -> None:

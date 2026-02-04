@@ -66,23 +66,24 @@ class ShapTransformer(BaseEstimator, TransformerMixin):
         explanation = self.explainer_(X, check_additivity=False)
         shap_values = explanation.values  # noqa: PD011
 
-        # 处理多分类情况 (samples, features, classes)
+        # 维度转换逻辑: 确保 shap_values 最终为 (n_samples, n_features)
+        if shap_values.ndim == 3 and shap_values.shape[2] == 2:
+            # 二分类情况: 取正类贡献
+            shap_values = shap_values[:, :, 1]
+
         if shap_values.ndim == 3:
+            # 真正的多分类情况 (> 2 classes)
             if not self.enable_multiclass:
                 raise ValueError(
-                    "Detected multiclass SHAP values (ndim=3), but multiclass support is disabled. "
-                    "To enable it, set `enable_multiclass=True` during initialization. "
-                    "Note: enabling this will collapse the class dimension by taking the mean of absolute SHAP values."
+                    "Detected multiclass SHAP values (ndim=3, n_classes > 2), but multiclass support is disabled. "
+                    "To enable it, set `enable_multiclass=True` during initialization."
                 )
 
             import warnings
 
             warnings.warn(
                 "Multiclass support in ShapTransformer is experimental. "
-                "Current behavior: The output shape is transformed from (n_samples, n_features, n_classes) "
-                "to (n_samples, n_features) by taking the mean of absolute SHAP values across all classes "
-                "(np.abs(shap_values).mean(axis=-1)). "
-                "This represents the overall feature influence across all categories.",
+                "Collapsing class dimension by taking mean of absolute SHAP values.",
                 UserWarning,
                 stacklevel=2,
             )
@@ -110,9 +111,11 @@ class ShapTransformer(BaseEstimator, TransformerMixin):
         explanation = self.explainer_(X, check_additivity=False)
         shap_values = explanation.values  # noqa: PD011
 
-        # 处理多分类情况 (根据 fit 阶段确定的逻辑)
+        # 维度转换逻辑 (与 fit 保持一致)
+        if shap_values.ndim == 3 and shap_values.shape[2] == 2:
+            shap_values = shap_values[:, :, 1]
+
         if shap_values.ndim == 3:
-            # 这里不再重复报错或警告，因为 fit 阶段已经处理过
             shap_values = np.abs(shap_values).mean(axis=-1)
 
         return pd.DataFrame(shap_values, index=X.index, columns=X.columns)
