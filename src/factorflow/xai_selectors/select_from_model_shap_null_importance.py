@@ -4,8 +4,7 @@ from loguru import logger
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import shap
-from sklearn.base import BaseEstimator, clone
+from sklearn.base import BaseEstimator
 from sklearn.model_selection import train_test_split
 from tqdm.auto import tqdm
 
@@ -15,6 +14,7 @@ except ImportError:
     mlflow = None
 
 from factorflow.base import Callback, Selector
+from factorflow.xai_selectors._shap_transformer import ShapTransformer
 from factorflow.xai_selectors.select_from_model_shap_cv import SelectFromModelShapCV
 from factorflow.xai_selectors.utils import visualization
 
@@ -231,18 +231,27 @@ class SelectFromModelShapNullImportance(Selector):
                 train_test_split(X, y_permuted_series, test_size=self.val_size, random_state=rng),
             )
 
-            model = self._fit_null_model(X_train, y_train, X_val, y_val)
+            # 使用 ShapTransformer 替代手动拟合和计算
+            transformer = ShapTransformer(
+                estimator=self.estimator,
+                task_type=cast(Literal["classification", "regression"], self.task_type),
+                enable_multiclass=True,
+            )
 
-            # 计算 SHAP
+            fit_params = (self.model_fit_params or {}).copy()
+            if self.fit_uses_eval_set:
+                fit_params.update({"eval_set": [(X_val, y_val)], "verbose": False})
+
+            # 采样 X 用于 SHAP 计算
             X_shap_val = X_val
             if self.shap_sample_size and len(X_val) > self.shap_sample_size:
                 X_shap_val = X_val.sample(n=self.shap_sample_size, random_state=rng)
 
-            explainer = shap.Explainer(model, X_train)
-            explanation = explainer(X_shap_val, check_additivity=False)
-
-            shap_vals, _ = self._process_shap_output(explanation)
-            null_imp = np.abs(shap_vals).mean(axis=0)
+            # 在训练集上拟合，在采样后的验证集上转换
+            transformer.fit(X_train, y_train, **fit_params)
+            # 注意: 我们需要的是在验证集 X_shap_val 上的重要性，以保持 OOF 逻辑
+            shap_df = transformer.transform(X_shap_val)
+            null_imp = np.abs(shap_df.to_numpy()).mean(axis=0)
             null_imps_list.append(null_imp)
 
         self.null_importances_distribution_ = np.array(null_imps_list)
@@ -252,24 +261,6 @@ class SelectFromModelShapNullImportance(Selector):
         self.selected_features_ = self._get_selected_features()
 
         return self
-
-    def _fit_null_model(self, X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series) -> Any:
-        """为 Null Trial 拟合一个独立的模型克隆."""
-        model: Any = clone(self.estimator)
-        fit_params = (self.model_fit_params or {}).copy()
-        if self.fit_uses_eval_set:
-            fit_params.update({"eval_set": [(X_val, y_val)], "verbose": False})
-        model.fit(X_train, y_train, **fit_params)
-        return model
-
-    def _process_shap_output(self, explanation: Any) -> tuple[np.ndarray, np.ndarray]:
-        """处理 SHAP 输出, 确保兼容多分类."""
-        shap_vals = explanation.values  # noqa: PD011
-        base_vals = explanation.base_values
-        if shap_vals.ndim == 3:  # 多分类任务
-            shap_vals = np.abs(shap_vals).mean(axis=-1)
-            base_vals = base_vals[:, 0] if base_vals.ndim > 1 else base_vals
-        return shap_vals, base_vals
 
     def _calculate_stats(self) -> None:
         """计算 P-value 和得分 (Ratio)."""

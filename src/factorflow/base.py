@@ -204,8 +204,7 @@ class Selector(BaseEstimator, SelectorMixin):
     selected_features_: list[str]
     feature_names_in_: np.ndarray
     n_features_in_: int
-    _input_shape: tuple[int, ...]
-    _callbacks: list[Callback]
+    callbacks: list[Callback]
 
     def __init__(
         self,
@@ -234,28 +233,16 @@ class Selector(BaseEstimator, SelectorMixin):
         self.selection_check = selection_check
         self.check_features_patterns = check_features_patterns
         self.label = label
-        self._callbacks = []
-        _initial_callbacks = callbacks or []
-
-        # 初始化基于参数的 Callbacks
-        self._init_param_callbacks()
-
-        # 添加初始传入的 Callbacks
-        for cb in _initial_callbacks:
-            self.add_callback(cb)
-
-    def _init_param_callbacks(self):
-        """将构造函数参数转换为 Callbacks."""
+        self.callbacks = []
         if self.selection_check:
-            self._ensure_callback(CheckXShape)
-
+            self.add_callback(CheckXShape())
         if self.check_features_patterns:
-            cb = self._ensure_callback(CheckFeatures)
-            cb.add_patterns(self.check_features_patterns)
-
+            self.add_callback(CheckFeatures(self.check_features_patterns))
         if self.protected_features_patterns:
-            cb = self._ensure_callback(ProtectFeatures)
-            cb.add_patterns(self.protected_features_patterns)
+            self.add_callback(ProtectFeatures(self.protected_features_patterns))
+        if callbacks:
+            for cb in callbacks:
+                self.add_callback(cb)
 
     def add_callback(self, callback: Callback) -> "Selector":
         """添加回调函数.
@@ -268,13 +255,13 @@ class Selector(BaseEstimator, SelectorMixin):
         -------
             self
         """
-        self._callbacks.append(callback)
+        self.callbacks.append(callback)
         callback.on_callback_add(self)
         return self
 
     def _ensure_callback(self, callback_cls: type) -> Any:
         """确保特定类型的 Callback 存在，如果不存在则创建并添加."""
-        for cb in self._callbacks:
+        for cb in self.callbacks:
             if isinstance(cb, callback_cls):
                 return cb
         new_cb = callback_cls()
@@ -283,7 +270,7 @@ class Selector(BaseEstimator, SelectorMixin):
 
     def _remove_callback(self, callback_cls: type):
         """移除特定类型的 Callback."""
-        self._callbacks = [cb for cb in self._callbacks if not isinstance(cb, callback_cls)]
+        self.callbacks = [cb for cb in self.callbacks if not isinstance(cb, callback_cls)]
 
     # ============================== abstract methods ==============================
     @abstractmethod
@@ -395,7 +382,7 @@ class Selector(BaseEstimator, SelectorMixin):
 
     # ============================== core functions & properties ==============================
     @final
-    def fit(self, X: pd.DataFrame, y: Any = None, **kwargs) -> "Selector":  # noqa: D102
+    def fit(self, X: pd.DataFrame, y: pd.DataFrame | pd.Series | None = None, **kwargs) -> "Selector":  # noqa: D102
         self.label = self.label or f"{self.__class__.__name__}_{datetime.now().strftime('%H%M%S_%f')}"
 
         if isinstance(y, pd.DataFrame):
@@ -407,10 +394,14 @@ class Selector(BaseEstimator, SelectorMixin):
 
         self.feature_names_in_ = np.array(X.columns.tolist())
         self.n_features_in_ = len(self.feature_names_in_)
-        self._input_shape = X.shape
+
+        # Check for duplicate column names
+        if len(self.feature_names_in_) != len(set(self.feature_names_in_)):
+            duplicates = X.columns[X.columns.duplicated()].unique().tolist()
+            raise ValueError(f"[{self.label}] Input DataFrame X contains duplicate column names: {duplicates}")
 
         # --- Pre-fit Callbacks ---
-        for cb in self._callbacks:
+        for cb in self.callbacks:
             cb.on_fit_start(self, X, y)
 
         self._fit(X, y, **kwargs)
@@ -420,7 +411,7 @@ class Selector(BaseEstimator, SelectorMixin):
             raise AttributeError(f"[{self.label}] _fit() must set self.selected_features_")
 
         # --- Post-fit Callbacks ---
-        for cb in self._callbacks:
+        for cb in self.callbacks:
             cb.on_fit_end(self, X, y)
 
         return self

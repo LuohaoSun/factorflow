@@ -4,8 +4,7 @@ from loguru import logger
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import shap
-from sklearn.base import BaseEstimator, clone
+from sklearn.base import BaseEstimator
 from sklearn.metrics import (
     accuracy_score,
     mean_absolute_error,
@@ -19,6 +18,7 @@ except ImportError:
     mlflow = None
 
 from factorflow.base import Callback, Selector
+from factorflow.xai_selectors._shap_transformer import ShapTransformer
 from factorflow.xai_selectors.utils import metrics, visualization
 
 
@@ -290,38 +290,7 @@ class SelectFromModelShapCV(Selector):
         # 2. 交叉验证循环
         y_series = pd.Series(y, index=X.index) if not isinstance(y, pd.Series) else y
         for fold_idx, (train_idx, val_idx) in enumerate(cv.split(X, y)):
-            X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
-            y_train, y_val = y_series.iloc[train_idx], y_series.iloc[val_idx]
-
-            # 获取 SHAP 采样索引
-            X_shap, fill_idx = self._get_shap_samples(X_val, val_idx, fold_idx)
-
-            # 拟合单折模型
-            model = self._fit_fold_model(X_train, y_train, X_val, y_val)
-
-            # 计算这一折的 SHAP 值
-            explainer = shap.Explainer(model, X_train)
-            explanation = explainer(X_shap, check_additivity=False)
-            shap_vals, base_vals = self._process_shap_output(explanation)
-
-            # 存储至 OOF 矩阵
-            self.shap_values_oof_[fill_idx] = shap_vals
-            self.base_values_oof_[fill_idx] = np.asarray(base_vals).reshape(-1)
-            if self.shap_data_oof_ is not None:
-                self.shap_data_oof_.loc[X_shap.index] = X_shap
-
-            # 计算并存储预测值
-            y_pred = model.predict(X_val)
-            self.y_preds_oof_[val_idx] = y_pred
-
-            score = self._evaluate_fold_metric(y_val, y_pred)
-            auc = self._record_proba_and_auc(model, X_val, y_val, val_idx)
-
-            # 触发单折回调 (on_fold_end)
-            fold_logs = {"score": score, "auc": auc}
-            for cb in self._callbacks:
-                if isinstance(cb, FoldEndCallback):
-                    cb.on_fold_end(self, fold_idx, fold_logs)
+            self._fit_single_fold(X, y_series, train_idx, val_idx, fold_idx)
 
         # 3. 后处理: 计算全局重要性
         importances_arr = np.nanmean(np.abs(self.shap_values_oof_), axis=0)
@@ -329,6 +298,59 @@ class SelectFromModelShapCV(Selector):
         self.selected_features_ = self._get_selected_features()
 
         return self
+
+    def _fit_single_fold(
+        self,
+        X: pd.DataFrame,
+        y_series: pd.Series,
+        train_idx: np.ndarray,
+        val_idx: np.ndarray,
+        fold_idx: int,
+    ) -> None:
+        """执行单折的拟合、预测和 SHAP 计算."""
+        X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+        y_train, y_val = y_series.iloc[train_idx], y_series.iloc[val_idx]
+
+        # 获取 SHAP 采样索引
+        X_shap, fill_idx = self._get_shap_samples(X_val, val_idx, fold_idx)
+
+        # 使用 ShapTransformer 替代手动拟合和计算
+        transformer = ShapTransformer(
+            estimator=self.estimator,
+            task_type=self.task_type,  # pyright: ignore[reportArgumentType]
+            enable_multiclass=True,  # CV 内部允许处理多分类
+        )
+
+        fit_params = (self.model_fit_params or {}).copy()
+        if self.fit_uses_eval_set:
+            fit_params.update({"eval_set": [(X_val, y_val)], "verbose": False})
+
+        transformer.fit(X_train, y_train, **fit_params)
+        shap_df = transformer.transform(X_shap)
+
+        # 存储至 OOF 矩阵
+        self.shap_values_oof_[fill_idx] = shap_df.to_numpy()
+        # 注意: ShapTransformer 目前不直接暴露 base_values，我们从其内部 explainer 获取
+        explanation = transformer.explainer_(X_shap, check_additivity=False)
+        _, base_vals = self._process_shap_output(explanation)
+        self.base_values_oof_[fill_idx] = np.asarray(base_vals).reshape(-1)
+
+        if self.shap_data_oof_ is not None:
+            self.shap_data_oof_.loc[X_shap.index] = X_shap
+
+        # 计算并存储预测值
+        model = transformer.estimator_
+        y_pred = model.predict(X_val)  # pyright: ignore[reportAttributeAccessIssue]
+        self.y_preds_oof_[val_idx] = y_pred
+
+        score = self._evaluate_fold_metric(y_val, y_pred)
+        auc = self._record_proba_and_auc(model, X_val, y_val, val_idx)
+
+        # 触发单折回调 (on_fold_end)
+        fold_logs = {"score": score, "auc": auc}
+        for cb in self.callbacks:
+            if isinstance(cb, FoldEndCallback):
+                cb.on_fold_end(self, fold_idx, fold_logs)
 
     def _get_shap_samples(
         self,
@@ -342,15 +364,6 @@ class SelectFromModelShapCV(Selector):
         rng = np.random.RandomState(self.random_state + fold_idx)
         local_idx = rng.choice(len(X_val), self.shap_sample_size, replace=False)
         return X_val.iloc[local_idx], val_idx[local_idx]
-
-    def _fit_fold_model(self, X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series) -> Any:
-        """克隆并训练单折模型."""
-        model: Any = clone(self.estimator)
-        fit_params = (self.model_fit_params or {}).copy()
-        if self.fit_uses_eval_set:
-            fit_params.update({"eval_set": [(X_val, y_val)], "verbose": False})
-        model.fit(X_train, y_train, **fit_params)
-        return model
 
     def _process_shap_output(self, explanation: Any) -> tuple[np.ndarray, np.ndarray]:
         """标准化 SHAP 输出, 自动处理多分类降维."""
